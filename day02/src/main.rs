@@ -39,7 +39,7 @@ impl<'a> TryFrom<&'a str> for PasswordRecord<'a> {
 
     fn try_from(s: &'a str) -> ::std::result::Result<Self, Self::Error> {
         let captures = PASSWORD_RECORD_RE
-            .captures(&s)
+            .captures(s)
             .ok_or("Failed to parse password record")?;
 
         let start = captures
