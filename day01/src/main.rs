@@ -23,10 +23,10 @@ fn find_xy<P: FnMut(&(usize, &str)) -> bool>(
 }
 
 fn part_one(input: &str) -> Result<()> {
-    if let Some((x, y)) = find_xy(&input, 2020, |_| true)? {
+    if let Some((x, y)) = find_xy(input, 2020, |_| true)? {
         println!("Part One: {}", x * y);
     } else {
-        println!("Part One: Could not find answer")
+        println!("Part One: Could not find answer");
     }
     Ok(())
 }
@@ -36,18 +36,17 @@ fn part_two(input: &str) -> Result<()> {
     for (i, line) in input.lines().enumerate() {
         let entry = line.parse::<i32>()?;
         let target = 2020 - entry;
-        if let Some(_) = known_targets.get(&target) {
+        if known_targets.get(&target).is_some() {
             continue;
+        } else if let Some((x, y)) = find_xy(input, target, |iline| iline.0 != i)? {
+            println!("Part Two: {}", entry * x * y);
+            return Ok(());
         } else {
-            if let Some((x, y)) = find_xy(&input, target, |iline| iline.0 != i)? {
-                println!("Part Two: {}", entry * x * y);
-                return Ok(());
-            } else {
-                known_targets.insert(target);
-            }
+            known_targets.insert(target);
         }
     }
 
+    println!("Part Two: Could not find answer");
     Ok(())
 }
 
