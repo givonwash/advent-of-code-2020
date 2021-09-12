@@ -29,8 +29,8 @@ struct Passport {
 /// All states a passport field can be in.
 ///
 /// In part one we are not concerned about the validity of any given field, thus if a given
-/// passport has _something_ for all fields (with the exception of the `country_id`) field, then
-/// that passport is considered __valid__.
+/// passport has _something_ for all fields (with the exception of the `country_id` field), then
+/// that passport is considered _valid_.
 ///
 /// In part two we _are_ concerned about the validity of all the passports fields, thus a passport
 /// field having _something_ is not enough. We need to "check" this field for any parsing or
@@ -50,7 +50,7 @@ struct Rgb {
     b: u8,
 }
 
-/// Allowed units for a passport to express length in
+/// Possible units for a passport to express length in
 #[derive(Clone, Copy)]
 enum LengthUnit {
     Centimeters,
@@ -64,7 +64,7 @@ struct Height {
     value: u32,
 }
 
-/// Allowed eye colors
+/// Possible eye colors
 #[derive(Clone, Copy)]
 enum EyeColor {
     Amber,
@@ -76,9 +76,11 @@ enum EyeColor {
     Other,
 }
 
+/// `pid` field on a passport
 #[derive(Clone, Copy)]
 struct PassportID(u32);
 
+/// Any year specified on a passport
 #[derive(Clone, Copy)]
 struct Year(u16);
 
@@ -213,6 +215,9 @@ impl Default for Passport {
     }
 }
 
+/// Quick and dirty macro for grabbing the "value" capture group in the `KEY_VAL_RE` regex and
+/// inserting it into a passport. Using this to avoid having to repeat typing out the same code for
+/// each potential key
 macro_rules! insert_capture_value {
     ($passport:ident.$attribute:ident , $captures:ident) => {
         let $attribute = $captures.name("value").unwrap().as_str().parse();
@@ -260,6 +265,9 @@ impl FromStr for Passport {
 }
 
 impl<T, E> PassportField<T, E> {
+    /// Validate a passport field by checking it via `validator` and updating the field's state
+    /// from `Unchecked` to `CheckedValid` or `CheckedInvalid depending on the returned Result
+    /// variant
     fn validate<V>(&mut self, validator: V)
     where
         V: Fn(&T) -> Result<T, CheckPassportError<E>>,
