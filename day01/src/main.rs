@@ -1,61 +1,73 @@
 use std::collections::HashSet;
 use std::io::{self, Read};
 
-type Result<T> = ::std::result::Result<T, Box<dyn::std::error::Error>>;
-
-fn find_xy<P: FnMut(&(usize, &str)) -> bool>(
-    input: &str,
+struct ComplementCache {
+    cache: HashSet<i32>,
     target: i32,
-    predicate: P,
-) -> Result<Option<(i32, i32)>> {
-    let mut seen = HashSet::new();
-    for (_, line) in input.lines().enumerate().filter(predicate) {
-        let entry = line.parse::<i32>()?;
-        let complement = target - entry;
-        if let Some(complement) = seen.get(&complement) {
-            return Ok(Some((entry, *complement)));
+}
+
+impl ComplementCache {
+    fn query(&mut self, x: i32) -> Option<i32> {
+        if let Some(y) = self.cache.get(&(self.target - x)) {
+            Some(*y)
         } else {
-            seen.insert(entry);
+            self.cache.insert(x);
+            None
         }
     }
-
-    Ok(None)
 }
 
-fn part_one(input: &str) -> Result<()> {
-    if let Some((x, y)) = find_xy(input, 2020, |_| true)? {
-        println!("Part One: {}", x * y);
-    } else {
-        println!("Part One: Could not find answer");
+fn part_one<I: Iterator<Item = i32>>(input: I) {
+    let mut cache = ComplementCache {
+        cache: HashSet::new(),
+        target: 2020,
+    };
+    for x in input {
+        if let Some(y) = cache.query(x) {
+            println!("Part One: {}", x * y);
+            return;
+        }
     }
-    Ok(())
+    println!("Part One: Could not find answer");
 }
 
-fn part_two(input: &str) -> Result<()> {
-    let mut known_targets = HashSet::new();
-    for (i, line) in input.lines().enumerate() {
-        let entry = line.parse::<i32>()?;
-        let target = 2020 - entry;
-        if known_targets.get(&target).is_some() {
+fn part_two<I>(input: I)
+where
+    I: Iterator<Item = i32> + Clone,
+{
+    let mut seen = HashSet::new();
+
+    for (i, x) in input.clone().enumerate() {
+        // if we have already encountered a value before, no need to check it again
+        if seen.get(&x).is_some() {
             continue;
-        } else if let Some((x, y)) = find_xy(input, target, |iline| iline.0 != i)? {
-            println!("Part Two: {}", entry * x * y);
-            return Ok(());
         } else {
-            known_targets.insert(target);
+            seen.insert(x);
+            let mut cache = ComplementCache {
+                cache: HashSet::new(),
+                target: 2020 - x,
+            };
+            for (_, y) in input.clone().enumerate().filter(|(j, _)| *j != i) {
+                if let Some(z) = cache.query(y) {
+                    println!("Part Two: {}", (x * y * z));
+                    return;
+                }
+            }
         }
     }
 
     println!("Part Two: Could not find answer");
-    Ok(())
 }
 
-fn main() -> Result<()> {
+fn main() -> io::Result<()> {
     println!("Solving for day 01.");
-    let mut input = String::new();
-    io::stdin().read_to_string(&mut input)?;
-    part_one(&input)?;
-    part_two(&input)?;
+    let mut buffer = String::new();
+    io::stdin().read_to_string(&mut buffer)?;
+    let input = buffer
+        .lines()
+        .map(|l| l.parse().expect("Failed to parse entry in input into i32"));
+    part_one(input.clone());
+    part_two(input);
 
     Ok(())
 }
