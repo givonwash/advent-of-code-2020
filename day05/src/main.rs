@@ -105,30 +105,24 @@ fn part_two<I>(input: I)
 where
     I: Iterator<Item = Seat>,
 {
-    let (min, max, sum) =
-        input
-            .map(|s| s.id)
-            .fold((None, None, 0), |(mut amin, mut amax, mut asum), id| {
-                amax = amax.or(Some(id)).map(|mx| mx.max(id));
-                amin = amin.or(Some(id)).map(|mn| mn.min(id));
-                asum += id;
-                (amin, amax, asum)
-            });
-    match (min, max, sum) {
-        (Some(min), Some(max), sum) => {
-            // sum of natural numbers up to max
-            let upto_max = max * (max + 1) / 2;
-            // sum of natural numbers up to (min - 1)
-            let upto_min = (min - 1) * min / 2;
-            // diff between upto_max and upto_min gives what the sum of all seat IDs should equal
-            // if there were no gaps. subtracting the actual sum of seat IDs returns our seat ID
-            let answer = upto_max - upto_min - sum;
-            println!("Part Two: {}", answer);
-        }
-        (_, _, _) => {
-            println!("Part Two: Could not find answer")
-        }
-    }
+    let (min, max, sum) = input.map(|s| s.id).fold(
+        (u32::max_value(), u32::min_value(), 0),
+        |(mut amin, mut amax, mut asum), id| {
+            amax = amax.max(id);
+            amin = amin.min(id);
+            asum += id;
+            (amin, amax, asum)
+        },
+    );
+
+    // sum of natural numbers up to max
+    let upto_max = max * (max + 1) / 2;
+    // sum of natural numbers up to (min - 1)
+    let upto_min = (min - 1) * min / 2;
+    // diff between upto_max and upto_min gives what the sum of all seat IDs should equal
+    // if there were no gaps. subtracting the actual sum of seat IDs returns our seat ID
+    let answer = upto_max - upto_min - sum;
+    println!("Part Two: {}", answer);
 }
 
 fn main() -> io::Result<()> {
