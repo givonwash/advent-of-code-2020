@@ -1,135 +1,88 @@
-use std::convert::{TryFrom, TryInto};
 use std::io::{self, Read};
+use std::str::FromStr;
 
-struct Seat {
-    id: u32,
-}
-
-#[derive(Clone, Copy)]
-struct Row(u32);
-
-#[derive(Clone, Copy)]
-struct Column(u32);
+struct Seat(u32);
 
 #[derive(Debug)]
-enum ParseBoardingPassError {
+enum ParseSeatError {
     InvalidChars,
-    TooManyChars,
+    InvalidLength,
 }
 
-impl TryFrom<&str> for Row {
-    type Error = ParseBoardingPassError;
+fn parse_binary(s: &str, one: char, zero: char) -> Result<u32, ParseSeatError> {
+    s.chars()
+        .rev()
+        .enumerate()
+        .map(|(i, c)| {
+            if c == one {
+                Ok(2u32.pow(i as u32))
+            } else if c == zero {
+                Ok(0)
+            } else {
+                Err(ParseSeatError::InvalidChars)
+            }
+        })
+        .try_fold(0, |acc, res| res.map(|n| acc + n))
+}
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if value.len() > 7 {
-            Err(ParseBoardingPassError::TooManyChars)
+impl FromStr for Seat {
+    type Err = ParseSeatError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (row, column) = s.split_at(7);
+        if column.len() > 3 {
+            Err(Self::Err::InvalidLength)
         } else {
-            Ok(Row(value
-                .chars()
-                .rev()
-                .enumerate()
-                .map(|(i, c)| {
-                    if c == 'B' {
-                        Ok(2u32.pow(i as u32))
-                    } else if c == 'F' {
-                        Ok(0)
-                    } else {
-                        Err(ParseBoardingPassError::InvalidChars)
-                    }
-                })
-                .try_fold(0, |acc, res| res.map(|x| acc + x))?))
+            let row = parse_binary(row, 'B', 'F')?;
+            let column = parse_binary(column, 'R', 'L')?;
+
+            Ok(Self((row * 8) + column))
         }
     }
 }
 
-impl TryFrom<&str> for Column {
-    type Error = ParseBoardingPassError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if value.len() > 3 {
-            Err(ParseBoardingPassError::TooManyChars)
-        } else {
-            Ok(Column(
-                value
-                    .chars()
-                    .rev()
-                    .enumerate()
-                    .map(|(i, c)| {
-                        if c == 'R' {
-                            Ok(2u32.pow(i as u32))
-                        } else if c == 'L' {
-                            Ok(0)
-                        } else {
-                            Err(ParseBoardingPassError::InvalidChars)
-                        }
-                    })
-                    .try_fold(0, |acc, res| res.map(|x| acc + x))?,
-            ))
-        }
-    }
+fn part_one<I: Iterator<Item = Seat>>(seats: I) {
+    let answer = seats
+        .map(|s| s.0)
+        .max()
+        .expect("No Boarding Passes passed as input");
+    println!("Part One: {}", answer);
 }
 
-impl From<(Row, Column)> for Seat {
-    fn from((row, column): (Row, Column)) -> Self {
-        Self {
-            id: (row.0 * 8) + column.0,
+fn part_two<I: Iterator<Item = Seat>>(seats: I) {
+    let (min, max, sum): (Option<u32>, Option<u32>, u32) =
+        seats
+            .map(|s| s.0)
+            .fold((None, None, 0), |(amin, amax, asum), id| {
+                let min = amin.map(|mn| mn.min(id)).or(Some(id));
+                let max = amax.map(|mx| mx.max(id)).or(Some(id));
+                let sum = asum + id;
+                (min, max, sum)
+            });
+
+    match (min, max, sum) {
+        (Some(min), Some(max), sum) => {
+            let to_max = max * (max + 1) / 2;
+            let to_min = min * (min - 1) / 2;
+            let answer = to_max - to_min - sum;
+            println!("Part Two: {}", answer);
+        }
+        _ => {
+            println!("Part Two: No Answer Found");
         }
     }
-}
-
-impl TryFrom<&str> for Seat {
-    type Error = ParseBoardingPassError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let (row, column) = value.split_at(7);
-        Ok(Seat::from((row.try_into()?, column.try_into()?)))
-    }
-}
-
-fn part_one<I>(input: I)
-where
-    I: Iterator<Item = Seat>,
-{
-    let answer = input.map(|s| s.id).max();
-    match answer {
-        Some(ans) => {
-            println!("Part One: {}", ans);
-        }
-        None => {
-            println!("Part One: Could not find answer");
-        }
-    }
-}
-
-fn part_two<I>(input: I)
-where
-    I: Iterator<Item = Seat>,
-{
-    let (min, max, sum) = input.map(|s| s.id).fold(
-        (u32::max_value(), u32::min_value(), 0),
-        |(mut amin, mut amax, mut asum), id| {
-            amax = amax.max(id);
-            amin = amin.min(id);
-            asum += id;
-            (amin, amax, asum)
-        },
-    );
-
-    // sum of natural numbers up to max
-    let upto_max = max * (max + 1) / 2;
-    // sum of natural numbers up to (min - 1)
-    let upto_min = (min - 1) * min / 2;
-    // diff between upto_max and upto_min gives what the sum of all seat IDs should equal
-    // if there were no gaps. subtracting the actual sum of seat IDs returns our seat ID
-    let answer = upto_max - upto_min - sum;
-    println!("Part Two: {}", answer);
 }
 
 fn main() -> io::Result<()> {
-    let mut buffer = String::new();
-    io::stdin().read_to_string(&mut buffer)?;
-    let input = buffer.lines().map(|l| Seat::try_from(l).unwrap());
-    part_one(input.clone());
-    part_two(input);
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input)?;
+
+    let seats = input
+        .lines()
+        .map(|seat| seat.parse().expect("Invalid Boarding Pass given"));
+
+    part_one(seats.clone());
+    part_two(seats);
+
     Ok(())
 }
