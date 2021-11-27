@@ -1,73 +1,71 @@
 use std::collections::HashSet;
 use std::io::{self, Read};
 
-struct ComplementCache {
-    cache: HashSet<i32>,
+fn get_complement_or_insert(
+    complements: &mut HashSet<i32>,
     target: i32,
+    candidate: i32,
+) -> Option<i32> {
+    complements.get(&(target - candidate)).cloned().or_else(|| {
+        complements.insert(candidate);
+        None
+    })
 }
 
-impl ComplementCache {
-    fn query(&mut self, x: i32) -> Option<i32> {
-        if let Some(y) = self.cache.get(&(self.target - x)) {
-            Some(*y)
-        } else {
-            self.cache.insert(x);
-            None
-        }
-    }
-}
+fn part_one<I>(expenses: I)
+where
+    I: Iterator<Item = i32>,
+{
+    let mut complements = HashSet::new();
 
-fn part_one<I: Iterator<Item = i32>>(input: I) {
-    let mut cache = ComplementCache {
-        cache: HashSet::new(),
-        target: 2020,
-    };
-    for x in input {
-        if let Some(y) = cache.query(x) {
-            println!("Part One: {}", x * y);
+    for expense_x in expenses {
+        if let Some(expense_y) = get_complement_or_insert(&mut complements, 2020, expense_x) {
+            println!("Part One: {}", (expense_x * expense_y));
             return;
         }
     }
-    println!("Part One: Could not find answer");
+
+    println!("Part One: No Answer Found");
 }
 
-fn part_two<I>(input: I)
+fn part_two<I>(expenses: I)
 where
     I: Iterator<Item = i32> + Clone,
 {
-    let mut seen = HashSet::new();
+    let mut attempted = HashSet::new();
 
-    for (i, x) in input.clone().enumerate() {
-        // if we have already encountered a value before, no need to check it again
-        if seen.get(&x).is_some() {
+    for (i, expense_x) in expenses.clone().enumerate() {
+        if attempted.contains(&expense_x) {
             continue;
         } else {
-            seen.insert(x);
-            let mut cache = ComplementCache {
-                cache: HashSet::new(),
-                target: 2020 - x,
-            };
-            for (_, y) in input.clone().enumerate().filter(|(j, _)| *j != i) {
-                if let Some(z) = cache.query(y) {
-                    println!("Part Two: {}", (x * y * z));
+            attempted.insert(expense_x);
+
+            let mut complements = HashSet::new();
+
+            for (_, expense_y) in expenses.clone().enumerate().filter(|(j, _)| i != *j) {
+                if let Some(expense_z) =
+                    get_complement_or_insert(&mut complements, 2020 - expense_x, expense_y)
+                {
+                    println!("Part Two: {}", (expense_x * expense_y * expense_z));
                     return;
                 }
             }
         }
     }
 
-    println!("Part Two: Could not find answer");
+    println!("Part Two: No Answer Found");
 }
 
 fn main() -> io::Result<()> {
-    println!("Solving for day 01.");
-    let mut buffer = String::new();
-    io::stdin().read_to_string(&mut buffer)?;
-    let input = buffer
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input)?;
+
+    let expenses = input
         .lines()
         .map(|l| l.parse().expect("Failed to parse entry in input into i32"));
-    part_one(input.clone());
-    part_two(input);
+
+    part_one(expenses.clone());
+    part_two(expenses);
 
     Ok(())
 }
