@@ -1,71 +1,62 @@
-mod errors;
-
-use crate::errors::{
-    CheckPassportError, ParseEyeColorError, ParseHeightError, ParsePassportError,
-    ParsePassportIntError, ParseRgbError, PassportInvalidLogicError,
-};
-
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::collections::HashMap;
 use std::io::{self, Read};
-use std::num::ParseIntError;
 use std::str::FromStr;
 
 lazy_static! {
-    static ref KEY_VAL_RE: Regex = Regex::new(r"\b(?P<key>\w{3}):(?P<value>#?\w+)").unwrap();
-}
-/// Passport of a single individual
-struct Passport {
-    birth_year: PassportField<Year, ParsePassportIntError>,
-    issue_year: PassportField<Year, ParsePassportIntError>,
-    expiration_year: PassportField<Year, ParsePassportIntError>,
-    height: PassportField<Height, ParseHeightError>,
-    hair_color: PassportField<Rgb, ParseRgbError>,
-    eye_color: PassportField<EyeColor, ParseEyeColorError>,
-    passport_id: PassportField<PassportID, ParsePassportIntError>,
-    country_id: PassportField<u32, ParseIntError>,
+    static ref KEY_VALUE_RE: Regex = Regex::new(r"\b(?P<key>\w{3}):(?P<value>#?\w+)").unwrap();
 }
 
-/// All states a passport field can be in.
-///
-/// In part one we are not concerned about the validity of any given field, thus if a given
-/// passport has _something_ for all fields (with the exception of the `country_id` field), then
-/// that passport is considered _valid_.
-///
-/// In part two we _are_ concerned about the validity of all the passports fields, thus a passport
-/// field having _something_ is not enough. We need to "check" this field for any parsing or
-/// logical errors.
-enum PassportField<T, E> {
-    Unchecked(Option<Result<T, E>>),
-    CheckedValid(T),
-    CheckedInvalid(CheckPassportError<E>),
-}
-
-/// RGB values from the hex specified with hair color and eye color
-#[allow(dead_code)]
-#[derive(Clone, Copy)]
-struct Rgb {
-    r: u8,
-    g: u8,
-    b: u8,
-}
-
-/// Possible units for a passport to express length in
-#[derive(Clone, Copy)]
-enum LengthUnit {
-    Centimeters,
+enum DistanceUnit {
     Inches,
+    Centimeters,
 }
 
-/// Height of the passport holder
-#[derive(Clone, Copy)]
-struct Height {
-    unit: LengthUnit,
-    value: u32,
+struct Height(usize, DistanceUnit);
+
+impl FromStr for Height {
+    type Err = ParsePassportError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (hgt, units) = s.split_at(s.len() - 2);
+
+        match units {
+            "in" => Ok(Self(
+                hgt.parse()
+                    .ok()
+                    .filter(|hgt| (59..=76).contains(hgt))
+                    .ok_or(Self::Err::InvalidField(Field::Height))?,
+                DistanceUnit::Inches,
+            )),
+            "cm" => Ok(Self(
+                hgt.parse()
+                    .ok()
+                    .filter(|hgt| (150..=193).contains(hgt))
+                    .ok_or(Self::Err::InvalidField(Field::Height))?,
+                DistanceUnit::Centimeters,
+            )),
+            _ => Err(Self::Err::InvalidField(Field::Height)),
+        }
+    }
 }
 
-/// Possible eye colors
-#[derive(Clone, Copy)]
+enum ParsePassportError {
+    MissingField(Field),
+    InvalidField(Field),
+}
+
+enum Field {
+    PassportID,
+    CountryID,
+    BirthYear,
+    ExpirationYear,
+    IssueYear,
+    Height,
+    HairColor,
+    EyeColor,
+}
+
 enum EyeColor {
     Amber,
     Blue,
@@ -76,75 +67,11 @@ enum EyeColor {
     Other,
 }
 
-/// `pid` field on a passport
-#[derive(Clone, Copy)]
-struct PassportID(u32);
-
-/// Any year specified on a passport
-#[derive(Clone, Copy)]
-struct Year(u16);
-
-impl FromStr for Rgb {
-    type Err = ParseRgbError;
-
-    fn from_str(hex: &str) -> Result<Self, Self::Err> {
-        if let Some(h) = hex.strip_prefix('#') {
-            match h.len() {
-                n if n > 6 => Err(Self::Err::TooFewDigits),
-                n if n < 6 => Err(Self::Err::TooManyDigits),
-                _ => {
-                    let as_int = u32::from_str_radix(h, 16).or(Err(Self::Err::InvalidChars))?;
-                    if as_int <= 0xffffff {
-                        let r = (as_int >> 16) as u8;
-                        let g = ((as_int >> 8) & (u32::MAX >> 24)) as u8;
-                        let b = (as_int & (u32::MAX >> 24)) as u8;
-                        Ok(Self { r, g, b })
-                    } else {
-                        Err(Self::Err::ValueTooLarge)
-                    }
-                }
-            }
-        } else if hex.is_empty() {
-            Err(Self::Err::NoValue)
-        } else {
-            Err(Self::Err::MissingHashtag)
-        }
-    }
-}
-
-impl FromStr for LengthUnit {
-    type Err = ParseHeightError;
-
-    fn from_str(length: &str) -> Result<Self, Self::Err> {
-        match length {
-            "in" => Ok(Self::Inches),
-            "cm" => Ok(Self::Centimeters),
-            "" => Err(Self::Err::NoUnit),
-            _ => Err(Self::Err::InvalidUnit),
-        }
-    }
-}
-
-impl FromStr for Height {
-    type Err = ParseHeightError;
-
-    fn from_str(height: &str) -> Result<Self, Self::Err> {
-        let up_to = height.len() - 2;
-        let value = height
-            .get(..up_to)
-            .ok_or(Self::Err::NoValue)?
-            .parse()
-            .or(Err(Self::Err::InvalidValue))?;
-        let unit = height.get(up_to..).ok_or(Self::Err::NoUnit)?.parse()?;
-        Ok(Self { unit, value })
-    }
-}
-
 impl FromStr for EyeColor {
-    type Err = ParseEyeColorError;
+    type Err = ParsePassportError;
 
-    fn from_str(eye_color: &str) -> Result<Self, Self::Err> {
-        match eye_color {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
             "amb" => Ok(Self::Amber),
             "blu" => Ok(Self::Blue),
             "brn" => Ok(Self::Brown),
@@ -152,267 +79,160 @@ impl FromStr for EyeColor {
             "grn" => Ok(Self::Green),
             "hzl" => Ok(Self::Hazel),
             "oth" => Ok(Self::Other),
-            "" => Err(Self::Err::NoValue),
-            _ => Err(Self::Err::InvalidValue),
+            _ => Err(Self::Err::InvalidField(Field::EyeColor)),
         }
     }
 }
 
-impl FromStr for PassportID {
-    type Err = ParsePassportIntError;
+#[allow(dead_code)]
+struct Passport<'a> {
+    id: usize,
+    country_id: Result<usize, ParsePassportError>,
+    birth_year: usize,
+    expiration_year: usize,
+    issue_year: usize,
+    height: Height,
+    hair_color: &'a str,
+    eye_color: EyeColor,
+}
 
-    fn from_str(pid: &str) -> Result<Self, Self::Err> {
-        match pid.parse() {
-            Ok(pid_parsed) => match pid.len() {
-                n if n < 9 => Err(Self::Err::TooFewDigits),
-                n if n > 9 => Err(Self::Err::TooManyDigits),
-                _ => Ok(Self(pid_parsed)),
-            },
-            Err(_) => {
-                if pid.is_empty() {
-                    Err(Self::Err::NoValue)
+impl<'a> TryFrom<HashMap<&'a str, &'a str>> for Passport<'a> {
+    type Error = ParsePassportError;
+
+    fn try_from(fields: HashMap<&'a str, &'a str>) -> Result<Self, Self::Error> {
+        let id = fields
+            .get("pid")
+            .ok_or(Self::Error::MissingField(Field::PassportID))
+            .map(|pid| {
+                (pid.len() == 9)
+                    .then(|| pid.parse().ok())
+                    .flatten()
+                    .ok_or(Self::Error::InvalidField(Field::PassportID))
+            })?;
+
+        let country_id = fields
+            .get("cid")
+            .ok_or(Self::Error::MissingField(Field::CountryID))
+            .map(|cid| {
+                cid.parse()
+                    .map_err(|_| Self::Error::InvalidField(Field::CountryID))
+            });
+
+        let birth_year = fields
+            .get("byr")
+            .ok_or(Self::Error::MissingField(Field::BirthYear))
+            .map(|byr| {
+                (byr.len() == 4)
+                    .then(|| byr.parse().ok().filter(|y| (1920..=2002).contains(y)))
+                    .flatten()
+                    .ok_or(Self::Error::InvalidField(Field::BirthYear))
+            })?;
+
+        let expiration_year = fields
+            .get("eyr")
+            .ok_or(Self::Error::MissingField(Field::ExpirationYear))
+            .map(|eyr| {
+                (eyr.len() == 4)
+                    .then(|| eyr.parse().ok().filter(|y| (2020..=2030).contains(y)))
+                    .flatten()
+                    .ok_or(Self::Error::InvalidField(Field::ExpirationYear))
+            })?;
+
+        let issue_year = fields
+            .get("iyr")
+            .ok_or(Self::Error::MissingField(Field::IssueYear))
+            .map(|iyr| {
+                (iyr.len() == 4)
+                    .then(|| iyr.parse().ok().filter(|y| (2010..=2020).contains(y)))
+                    .flatten()
+                    .ok_or(Self::Error::InvalidField(Field::IssueYear))
+            })?;
+
+        let height = fields
+            .get("hgt")
+            .ok_or(Self::Error::MissingField(Field::Height))?
+            .parse();
+
+        let hair_color = fields
+            .get("hcl")
+            .ok_or(Self::Error::MissingField(Field::HairColor))
+            .map(|hcl| {
+                let (prefix, hex) = hcl.split_at(1);
+                if prefix == "#"
+                    && hex.len() == 6
+                    && hex.chars().all(|c| matches!(c, 'a'..='f' | '0'..='9'))
+                {
+                    Ok(hex)
                 } else {
-                    Err(Self::Err::InvalidChars)
+                    Err(Self::Error::InvalidField(Field::HairColor))
                 }
-            }
-        }
-    }
-}
+            })?;
 
-impl FromStr for Year {
-    type Err = ParsePassportIntError;
+        let eye_color = fields
+            .get("ecl")
+            .ok_or(Self::Error::MissingField(Field::EyeColor))?
+            .parse();
 
-    fn from_str(year: &str) -> Result<Self, Self::Err> {
-        match year.parse() {
-            Ok(year_parsed) => match year.len() {
-                n if n < 4 => Err(Self::Err::TooFewDigits),
-                n if n > 4 => Err(Self::Err::TooManyDigits),
-                _ => Ok(Self(year_parsed)),
+        Ok(Self {
+            id: id?,
+            country_id: match country_id {
+                Ok(cid @ Ok(_)) => cid,
+                Ok(err @ Err(_)) => err,
+                Err(err) => Err(err),
             },
-            Err(_) => {
-                if year.is_empty() {
-                    Err(Self::Err::NoValue)
-                } else {
-                    Err(Self::Err::InvalidChars)
-                }
-            }
-        }
-    }
-}
-
-impl Default for Passport {
-    fn default() -> Self {
-        Self {
-            birth_year: PassportField::Unchecked(None),
-            issue_year: PassportField::Unchecked(None),
-            expiration_year: PassportField::Unchecked(None),
-            height: PassportField::Unchecked(None),
-            hair_color: PassportField::Unchecked(None),
-            eye_color: PassportField::Unchecked(None),
-            passport_id: PassportField::Unchecked(None),
-            country_id: PassportField::Unchecked(None),
-        }
-    }
-}
-
-/// Quick and dirty macro for grabbing the "value" capture group in the `KEY_VAL_RE` regex and
-/// inserting it into a passport. Using this to avoid having to repeat typing out the same code for
-/// each potential key
-macro_rules! insert_capture_value {
-    ($passport:ident.$attribute:ident , $captures:ident) => {
-        let $attribute = $captures.name("value").unwrap().as_str().parse();
-        $passport.$attribute = PassportField::Unchecked(Some($attribute));
-    };
-}
-
-impl FromStr for Passport {
-    type Err = ParsePassportError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut passport = Passport::default();
-        for captures in KEY_VAL_RE.captures_iter(s) {
-            let key = captures.name("key").unwrap().as_str();
-            match key {
-                "byr" => {
-                    insert_capture_value!(passport.birth_year, captures);
-                }
-                "iyr" => {
-                    insert_capture_value!(passport.issue_year, captures);
-                }
-                "eyr" => {
-                    insert_capture_value!(passport.expiration_year, captures);
-                }
-                "hgt" => {
-                    insert_capture_value!(passport.height, captures);
-                }
-                "hcl" => {
-                    insert_capture_value!(passport.hair_color, captures);
-                }
-                "ecl" => {
-                    insert_capture_value!(passport.eye_color, captures);
-                }
-                "pid" => {
-                    insert_capture_value!(passport.passport_id, captures);
-                }
-                "cid" => {
-                    insert_capture_value!(passport.country_id, captures);
-                }
-                _ => return Err(Self::Err::UnknownKey),
-            }
-        }
-        Ok(passport)
-    }
-}
-
-impl<T, E> PassportField<T, E> {
-    /// Validate a passport field by checking it via `validator` and updating the field's state
-    /// from `Unchecked` to `CheckedValid` or `CheckedInvalid depending on the returned Result
-    /// variant
-    fn validate<V>(&mut self, validator: V)
-    where
-        V: Fn(&T) -> Result<T, CheckPassportError<E>>,
-        E: Clone,
-    {
-        if let PassportField::Unchecked(unchecked_field) = self {
-            match unchecked_field {
-                Some(Ok(field)) => match validator(field) {
-                    Ok(v) => {
-                        *self = PassportField::CheckedValid(v);
-                    }
-                    Err(e) => *self = PassportField::CheckedInvalid(e),
-                },
-                Some(Err(err)) => {
-                    *self =
-                        PassportField::CheckedInvalid(CheckPassportError::ParsingError(err.clone()))
-                }
-                None => *self = PassportField::CheckedInvalid(CheckPassportError::DoesNotExist),
-            }
-        }
-    }
-}
-
-fn part_one<'a, I: Iterator<Item = &'a str>>(text_blocks: I) {
-    let valid_passport_count = text_blocks
-        .map(|p| Passport::from_str(p))
-        .filter(|p| {
-            if let Ok(passport) = p {
-                matches!(
-                    (
-                        &passport.birth_year,
-                        &passport.issue_year,
-                        &passport.expiration_year,
-                        &passport.height,
-                        &passport.hair_color,
-                        &passport.eye_color,
-                        &passport.passport_id
-                    ),
-                    (
-                        PassportField::Unchecked(Some(_)),
-                        PassportField::Unchecked(Some(_)),
-                        PassportField::Unchecked(Some(_)),
-                        PassportField::Unchecked(Some(_)),
-                        PassportField::Unchecked(Some(_)),
-                        PassportField::Unchecked(Some(_)),
-                        PassportField::Unchecked(Some(_)),
-                    )
-                )
-            } else {
-                false
-            }
+            birth_year: birth_year?,
+            expiration_year: expiration_year?,
+            issue_year: issue_year?,
+            height: height?,
+            hair_color: hair_color?,
+            eye_color: eye_color?,
         })
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Passport<'a> {
+    type Error = ParsePassportError;
+
+    fn try_from(passport: &'a str) -> Result<Self, Self::Error> {
+        KEY_VALUE_RE
+            .captures_iter(passport)
+            .map(|caps| {
+                let key = caps.name("key").unwrap().as_str();
+                let value = caps.name("value").unwrap().as_str();
+                (key, value)
+            })
+            .collect::<HashMap<&'a str, &'a str>>()
+            .try_into()
+    }
+}
+
+fn part_one<'a, I>(passports: I)
+where
+    I: Iterator<Item = Result<Passport<'a>, ParsePassportError>>,
+{
+    let answer = passports
+        .filter(|p| !matches!(p, Err(ParsePassportError::MissingField(_))))
         .count();
 
-    println!("Part One: {}", valid_passport_count);
+    println!("Part One: {}", answer);
 }
 
-fn part_two<'a, I: Iterator<Item = &'a str>>(text_blocks: I) {
-    let mut valid_count = 0;
-    for block in text_blocks {
-        let passport = Passport::from_str(block);
-        if let Ok(mut p) = passport {
-            p.birth_year.validate(|byr| {
-                if (1920..=2002).contains(&byr.0) {
-                    Ok(*byr)
-                } else {
-                    Err(CheckPassportError::LogicError(
-                        PassportInvalidLogicError::BirthYear,
-                    ))
-                }
-            });
-            p.issue_year.validate(|iyr| {
-                if (2010..=2020).contains(&iyr.0) {
-                    Ok(*iyr)
-                } else {
-                    Err(CheckPassportError::LogicError(
-                        PassportInvalidLogicError::IssueYear,
-                    ))
-                }
-            });
-            p.expiration_year.validate(|eyr| {
-                if (2020..=2030).contains(&eyr.0) {
-                    Ok(*eyr)
-                } else {
-                    Err(CheckPassportError::LogicError(
-                        PassportInvalidLogicError::ExpirationYear,
-                    ))
-                }
-            });
-            p.height.validate(|hgt| {
-                if let LengthUnit::Inches = hgt.unit {
-                    if (59..=76).contains(&hgt.value) {
-                        Ok(*hgt)
-                    } else {
-                        Err(CheckPassportError::LogicError(
-                            PassportInvalidLogicError::Height,
-                        ))
-                    }
-                } else if (150..=193).contains(&hgt.value) {
-                    Ok(*hgt)
-                } else {
-                    Err(CheckPassportError::LogicError(
-                        PassportInvalidLogicError::Height,
-                    ))
-                }
-            });
-            p.hair_color.validate(|hcl| Ok(*hcl));
-            p.eye_color.validate(|ecl| Ok(*ecl));
-            p.passport_id.validate(|pid| Ok(*pid));
+fn part_two<'a, I>(passports: I)
+where
+    I: Iterator<Item = Result<Passport<'a>, ParsePassportError>>,
+{
+    let answer = passports.filter(Result::is_ok).count();
 
-            if let (
-                PassportField::CheckedValid(_),
-                PassportField::CheckedValid(_),
-                PassportField::CheckedValid(_),
-                PassportField::CheckedValid(_),
-                PassportField::CheckedValid(_),
-                PassportField::CheckedValid(_),
-                PassportField::CheckedValid(_),
-            ) = (
-                p.birth_year,
-                p.issue_year,
-                p.expiration_year,
-                p.height,
-                p.hair_color,
-                p.eye_color,
-                p.passport_id,
-            ) {
-                valid_count += 1;
-            }
-        }
-    }
-
-    println!("Part Two: {}", valid_count);
+    println!("Part Two: {}", answer);
 }
 
-fn main() -> Result<(), io::Error> {
+fn main() -> io::Result<()> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
 
-    println!("Solving for day 04.");
+    let passports = input.split("\n\n").map(TryFrom::try_from);
 
-    let text_blocks = input.split("\n\n");
-
-    part_one(text_blocks.clone());
-    part_two(text_blocks);
-
+    part_one(passports.clone());
+    part_two(passports);
     Ok(())
 }
