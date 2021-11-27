@@ -1,8 +1,5 @@
 use std::io::{self, Read};
-use std::iter::{FromIterator, IntoIterator};
 use std::ops::AddAssign;
-
-type Result<T> = ::std::result::Result<T, Box<dyn::std::error::Error>>;
 
 #[derive(Clone, Copy)]
 struct Point {
@@ -73,8 +70,7 @@ impl<'a> TobogganRide<'a> {
             .get(cursor.x..(cursor.x + 1))
     }
 
-    #[inline]
-    fn step(&mut self) {
+    fn advance(&mut self) {
         self.cursor += self.toboggan.slope;
         self.cursor.normalize_x(self.hill.width);
     }
@@ -85,12 +81,12 @@ impl<'a> Iterator for TobogganRide<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let str_at_cursor = self.str_at_cursor();
-        self.step();
+        self.advance();
         str_at_cursor
     }
 }
 
-fn part_one<'a>(hill: &'a Hill<'a>) -> Result<()> {
+fn part_one<'a>(hill: &'a Hill<'a>) {
     let toboggan = Toboggan {
         slope: Point { x: 3, y: 1 },
     };
@@ -102,17 +98,15 @@ fn part_one<'a>(hill: &'a Hill<'a>) -> Result<()> {
         .count();
 
     println!("Part One: {}", trees_hit);
-
-    Ok(())
 }
 
-fn part_two<'a>(hill: &'a Hill<'a>) -> Result<()> {
+fn part_two<'a>(hill: &'a Hill<'a>) {
     let slopes = [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)];
     let origin = Point { x: 0, y: 0 };
     let tree_product: usize = slopes
         .iter()
-        .map(|s| Toboggan { slope: s.into() })
-        .map(|toboggan| {
+        .map(|s| {
+            let toboggan = Toboggan { slope: s.into() };
             toboggan
                 .ride(origin, hill)
                 .filter(|tile| *tile == "#")
@@ -120,17 +114,17 @@ fn part_two<'a>(hill: &'a Hill<'a>) -> Result<()> {
         })
         .product();
 
-    println!("Part two: {}", tree_product);
-
-    Ok(())
+    println!("Part Two: {}", tree_product);
 }
 
-fn main() -> Result<()> {
-    println!("Solving for day 03.");
+fn main() -> io::Result<()> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
+
     let hill = input.lines().collect();
-    part_one(&hill)?;
-    part_two(&hill)?;
+
+    part_one(&hill);
+    part_two(&hill);
+
     Ok(())
 }
