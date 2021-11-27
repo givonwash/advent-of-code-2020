@@ -1,105 +1,121 @@
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::convert::TryFrom;
-use std::error::Error;
 use std::io::{self, Read};
-
-type Result<T> = ::std::result::Result<T, Box<dyn Error>>;
 
 lazy_static! {
     static ref PASSWORD_RECORD_RE: Regex =
-        Regex::new(r"^(?P<start>\d+)-(?P<end>\d+)\s+(?P<pattern>\w):\s+(?P<password>.*)$").unwrap();
+        Regex::new(r"^(?P<lhs>\d+)-(?P<rhs>\d+)\s(?P<pattern>.):\s(?P<password>.*)$").unwrap();
+}
+
+enum PolicyKind {
+    PatternCount,
+    PatternPosition,
+}
+
+struct Policy<'a> {
+    lhs: usize,
+    rhs: usize,
+    pattern: &'a str,
 }
 
 struct PasswordRecord<'a> {
-    start: usize,
-    end: usize,
-    pattern: &'a str,
+    policy: Policy<'a>,
     password: &'a str,
 }
 
 impl<'a> PasswordRecord<'a> {
-    fn is_valid_pattern_count(&self) -> bool {
-        let pattern_count = self.password.match_indices(self.pattern).count();
-        (self.start..=self.end).contains(&pattern_count)
-    }
+    fn meets_policy(&self, kind: PolicyKind) -> bool {
+        let policy = &self.policy;
 
-    fn is_valid_pattern_position(&self) -> bool {
-        let valid_count = self
-            .password
-            .match_indices(self.pattern)
-            .filter(|(i, _)| (i + 1) == self.start || (i + 1) == self.end)
-            .count();
-        valid_count == 1
+        match kind {
+            PolicyKind::PatternCount => {
+                let pcount = self.password.matches(policy.pattern).count();
+                (policy.lhs..=policy.rhs).contains(&pcount)
+            }
+            PolicyKind::PatternPosition => {
+                let in_lhs = self
+                    .password
+                    .get((policy.lhs - 1)..policy.lhs)
+                    .map(|s| s == policy.pattern)
+                    .unwrap_or(false);
+                let in_rhs = self
+                    .password
+                    .get((policy.rhs - 1)..policy.rhs)
+                    .map(|s| s == policy.pattern)
+                    .unwrap_or(false);
+
+                in_lhs ^ in_rhs
+            }
+        }
     }
 }
 
 impl<'a> TryFrom<&'a str> for PasswordRecord<'a> {
-    type Error = Box<dyn Error>;
+    type Error = &'static str;
 
-    fn try_from(s: &'a str) -> ::std::result::Result<Self, Self::Error> {
-        let captures = PASSWORD_RECORD_RE
-            .captures(s)
-            .ok_or("Failed to parse password record")?;
+    fn try_from(record: &'a str) -> Result<Self, Self::Error> {
+        let caps = PASSWORD_RECORD_RE
+            .captures(record)
+            .ok_or("Password Regex Failed")?;
 
-        let start = captures
-            .name("start")
-            .ok_or("No 'start' found in PasswordRecord")?
+        let lhs = caps
+            .name("lhs")
+            .ok_or("`lhs` capture group missing")?
             .as_str()
-            .parse()?;
-        let end = captures
-            .name("end")
-            .ok_or("No 'end' in PasswordRecord")?
+            .parse::<usize>()
+            .or(Err("Could not parse `lhs` into usize"))?;
+        let rhs = caps
+            .name("rhs")
+            .ok_or("`rhs` capture group missing")?
             .as_str()
-            .parse()?;
-        let pattern = captures
+            .parse::<usize>()
+            .or(Err("Could not parse `rhs` into usize"))?;
+        let pattern = caps
             .name("pattern")
-            .ok_or("No 'pattern' in PasswordRecord")?
+            .ok_or("`pattern` capture group missing")?
             .as_str();
-        let password = captures
+        let password = caps
             .name("password")
-            .ok_or("No 'password' in PasswordRecord")?
+            .ok_or("`password` capture group missing")?
             .as_str();
 
         Ok(PasswordRecord {
-            start,
-            end,
-            pattern,
+            policy: Policy { lhs, rhs, pattern },
             password,
         })
     }
 }
 
-fn part_one(input: &str) -> Result<()> {
-    let mut count = 0;
-    for record in input.lines().map(|l| PasswordRecord::try_from(l)) {
-        if record?.is_valid_pattern_count() {
-            count += 1;
-        }
-    }
+fn part_one<'a, I>(records: I)
+where
+    I: Iterator<Item = PasswordRecord<'a>>,
+{
+    let answer = records
+        .filter(|rec| rec.meets_policy(PolicyKind::PatternCount))
+        .count();
 
-    println!("Part one: {}", count);
-    Ok(())
+    println!("Part One: {}", answer);
 }
 
-fn part_two(input: &str) -> Result<()> {
-    let mut count = 0;
-    for record in input.lines().map(|l| PasswordRecord::try_from(l)) {
-        if record?.is_valid_pattern_position() {
-            count += 1;
-        }
-    }
+fn part_two<'a, I>(records: I)
+where
+    I: Iterator<Item = PasswordRecord<'a>>,
+{
+    let answer = records
+        .filter(|rec| rec.meets_policy(PolicyKind::PatternPosition))
+        .count();
 
-    println!("Part two: {}", count);
-    Ok(())
+    println!("Part Two: {}", answer);
 }
 
-fn main() -> Result<()> {
-    println!("Solving for day 02.");
+fn main() -> io::Result<()> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
-    part_one(&input)?;
-    part_two(&input)?;
+
+    let records = input.lines().map(TryFrom::try_from).filter_map(Result::ok);
+
+    part_one(records.clone());
+    part_two(records);
 
     Ok(())
 }
