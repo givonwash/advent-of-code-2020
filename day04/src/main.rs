@@ -158,10 +158,7 @@ impl<'a> TryFrom<HashMap<&'a str, &'a str>> for Passport<'a> {
             .ok_or(Self::Error::MissingField(Field::HairColor))
             .map(|hcl| {
                 let (prefix, hex) = hcl.split_at(1);
-                if prefix == "#"
-                    && hex.len() == 6
-                    && hex.chars().all(|c| matches!(c, 'a'..='f' | '0'..='9'))
-                {
+                if prefix == "#" && hex.len() == 6 && hex.chars().all(|c| c.is_digit(16)) {
                     Ok(hex)
                 } else {
                     Err(Self::Error::InvalidField(Field::HairColor))
