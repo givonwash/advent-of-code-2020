@@ -173,8 +173,7 @@ impl<'a> TryFrom<HashMap<&'a str, &'a str>> for Passport<'a> {
         Ok(Self {
             id: id?,
             country_id: match country_id {
-                Ok(cid @ Ok(_)) => cid,
-                Ok(err @ Err(_)) => err,
+                Ok(cid) => cid,
                 Err(err) => Err(err),
             },
             birth_year: birth_year?,
