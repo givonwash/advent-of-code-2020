@@ -1,0 +1,10 @@
+color = { (ASCII_ALPHA_LOWER)+ ~ " "+ ~ (ASCII_ALPHA_LOWER)+ }
+bag = { color ~ " "+ ~ "bag" }
+bags = _{ bag ~ "s" }
+quantity = { ASCII_DIGIT+ }
+empty_rule = { "no other bags." }
+singular_rule = _{ quantity ~ " "+ ~ bag }
+plural_rule = _{ quantity ~ " "+ ~ bags }
+non_empty_rule = { (&("1" ~ " ") ~ singular_rule) | (plural_rule)  }
+rule_set = { ((non_empty_rule ~ ", ")* ~ non_empty_rule ~ ".") | (empty_rule) }
+definition = { SOI ~ bags ~ " "+ ~ "contain" ~ " "+ ~ rule_set ~ EOI }
