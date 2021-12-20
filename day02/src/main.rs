@@ -7,11 +7,6 @@ lazy_static! {
         Regex::new(r"^(?P<lhs>\d+)-(?P<rhs>\d+)\s(?P<pattern>.):\s(?P<password>.*)$").unwrap();
 }
 
-enum PolicyKind {
-    PatternCount,
-    PatternPosition,
-}
-
 struct Policy<'a> {
     lhs: usize,
     rhs: usize,
@@ -24,29 +19,16 @@ struct PasswordRecord<'a> {
 }
 
 impl<'a> PasswordRecord<'a> {
-    fn meets_policy(&self, kind: PolicyKind) -> bool {
+    fn is_count_compliant(&self) -> bool {
         let policy = &self.policy;
+        let pcount = self.password.matches(policy.pattern).count();
+        (policy.lhs..=policy.rhs).contains(&pcount)
+    }
 
-        match kind {
-            PolicyKind::PatternCount => {
-                let pcount = self.password.matches(policy.pattern).count();
-                (policy.lhs..=policy.rhs).contains(&pcount)
-            }
-            PolicyKind::PatternPosition => {
-                let in_lhs = self
-                    .password
-                    .get((policy.lhs - 1)..policy.lhs)
-                    .map(|s| s == policy.pattern)
-                    .unwrap_or(false);
-                let in_rhs = self
-                    .password
-                    .get((policy.rhs - 1)..policy.rhs)
-                    .map(|s| s == policy.pattern)
-                    .unwrap_or(false);
-
-                in_lhs ^ in_rhs
-            }
-        }
+    fn is_position_compliant(&self) -> bool {
+        let policy = &self.policy;
+        (&self.password[(policy.lhs - 1)..policy.lhs] == policy.pattern)
+            ^ (&self.password[(policy.rhs - 1)..policy.rhs] == policy.pattern)
     }
 }
 
@@ -58,26 +40,10 @@ impl<'a> TryFrom<&'a str> for PasswordRecord<'a> {
             .captures(record)
             .ok_or("Password Regex Failed")?;
 
-        let lhs = caps
-            .name("lhs")
-            .ok_or("`lhs` capture group missing")?
-            .as_str()
-            .parse::<usize>()
-            .or(Err("Could not parse `lhs` into usize"))?;
-        let rhs = caps
-            .name("rhs")
-            .ok_or("`rhs` capture group missing")?
-            .as_str()
-            .parse::<usize>()
-            .or(Err("Could not parse `rhs` into usize"))?;
-        let pattern = caps
-            .name("pattern")
-            .ok_or("`pattern` capture group missing")?
-            .as_str();
-        let password = caps
-            .name("password")
-            .ok_or("`password` capture group missing")?
-            .as_str();
+        let lhs = caps.name("lhs").unwrap().as_str().parse().unwrap();
+        let rhs = caps.name("rhs").unwrap().as_str().parse().unwrap();
+        let pattern = caps.name("pattern").unwrap().as_str();
+        let password = caps.name("password").unwrap().as_str();
 
         Ok(PasswordRecord {
             policy: Policy { lhs, rhs, pattern },
@@ -86,23 +52,19 @@ impl<'a> TryFrom<&'a str> for PasswordRecord<'a> {
     }
 }
 
-fn part_one<'a, I>(records: I)
-where
-    I: Iterator<Item = PasswordRecord<'a>>,
-{
+fn part_one(records: &[PasswordRecord<'_>]) {
     let answer = records
-        .filter(|rec| rec.meets_policy(PolicyKind::PatternCount))
+        .iter()
+        .filter(|rec| rec.is_count_compliant())
         .count();
 
     println!("Part One: {}", answer);
 }
 
-fn part_two<'a, I>(records: I)
-where
-    I: Iterator<Item = PasswordRecord<'a>>,
-{
+fn part_two(records: &[PasswordRecord<'_>]) {
     let answer = records
-        .filter(|rec| rec.meets_policy(PolicyKind::PatternPosition))
+        .iter()
+        .filter(|rec| rec.is_position_compliant())
         .count();
 
     println!("Part Two: {}", answer);
@@ -112,10 +74,14 @@ fn main() -> io::Result<()> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
 
-    let records = input.lines().map(TryFrom::try_from).filter_map(Result::ok);
+    let records = input
+        .lines()
+        .map(TryFrom::try_from)
+        .filter_map(Result::ok)
+        .collect::<Vec<_>>();
 
-    part_one(records.clone());
-    part_two(records);
+    part_one(&records);
+    part_two(&records);
 
     Ok(())
 }
