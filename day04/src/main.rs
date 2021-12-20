@@ -202,22 +202,17 @@ impl<'a> TryFrom<&'a str> for Passport<'a> {
     }
 }
 
-fn part_one<'a, I>(passports: I)
-where
-    I: Iterator<Item = Result<Passport<'a>, ParsePassportError>>,
-{
+fn part_one<'a>(passports: &[Result<Passport<'a>, ParsePassportError>]) {
     let answer = passports
+        .iter()
         .filter(|p| !matches!(p, Err(ParsePassportError::MissingField(_))))
         .count();
 
     println!("Part One: {}", answer);
 }
 
-fn part_two<'a, I>(passports: I)
-where
-    I: Iterator<Item = Result<Passport<'a>, ParsePassportError>>,
-{
-    let answer = passports.filter(Result::is_ok).count();
+fn part_two<'a>(passports: &[Result<Passport<'a>, ParsePassportError>]) {
+    let answer = passports.iter().filter(|res| res.is_ok()).count();
 
     println!("Part Two: {}", answer);
 }
@@ -226,9 +221,12 @@ fn main() -> io::Result<()> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
 
-    let passports = input.split("\n\n").map(TryFrom::try_from);
+    let passports = input
+        .split("\n\n")
+        .map(TryFrom::try_from)
+        .collect::<Vec<_>>();
 
-    part_one(passports.clone());
-    part_two(passports);
+    part_one(&passports);
+    part_two(&passports);
     Ok(())
 }
