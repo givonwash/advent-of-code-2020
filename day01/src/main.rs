@@ -1,59 +1,40 @@
 use std::collections::HashSet;
 use std::io::{self, Read};
 
-fn get_complement_or_insert(
-    complements: &mut HashSet<i32>,
-    target: i32,
-    candidate: i32,
-) -> Option<i32> {
-    complements.get(&(target - candidate)).cloned().or_else(|| {
-        complements.insert(candidate);
-        None
+fn find_xy(nums: &[i32], target: i32) -> Option<(i32, i32)> {
+    let mut complements = HashSet::new();
+
+    nums.iter().find_map(|n| {
+        if let Some(c) = complements.get(&(target - n)) {
+            Some((*n, *c))
+        } else {
+            complements.insert(*n);
+            None
+        }
     })
 }
 
-fn part_one<I>(expenses: I)
-where
-    I: Iterator<Item = i32>,
-{
-    let mut complements = HashSet::new();
-
-    for expense_x in expenses {
-        if let Some(expense_y) = get_complement_or_insert(&mut complements, 2020, expense_x) {
-            println!("Part One: {}", (expense_x * expense_y));
-            return;
-        }
-    }
-
-    println!("Part One: No Answer Found");
+fn part_one(expenses: &[i32]) {
+    println!(
+        "Part One: {:?}",
+        find_xy(expenses, 2020).map(|(x, y)| x * y)
+    );
 }
 
-fn part_two<I>(expenses: I)
-where
-    I: Iterator<Item = i32> + Clone,
-{
+fn part_two(expenses: &[i32]) {
     let mut attempted = HashSet::new();
+    let mut exp_iter = expenses.iter();
 
-    for (i, expense_x) in expenses.clone().enumerate() {
-        if attempted.contains(&expense_x) {
-            continue;
-        } else {
-            attempted.insert(expense_x);
-
-            let mut complements = HashSet::new();
-
-            for (_, expense_y) in expenses.clone().enumerate().filter(|(j, _)| i != *j) {
-                if let Some(expense_z) =
-                    get_complement_or_insert(&mut complements, 2020 - expense_x, expense_y)
-                {
-                    println!("Part Two: {}", (expense_x * expense_y * expense_z));
-                    return;
-                }
+    let ans = loop {
+        if let Some(z) = exp_iter.next().filter(|z| attempted.insert(*z)) {
+            if let Some((x, y)) = find_xy(expenses, 2020 - z) {
+                break Some(x * y * z);
             }
+        } else {
+            break None;
         }
-    }
-
-    println!("Part Two: No Answer Found");
+    };
+    println!("Part Two: {:?}", ans);
 }
 
 fn main() -> io::Result<()> {
@@ -62,10 +43,11 @@ fn main() -> io::Result<()> {
 
     let expenses = input
         .lines()
-        .map(|l| l.parse().expect("Failed to parse entry in input into i32"));
+        .map(|l| l.parse().expect("Failed to parse entry in input into i32"))
+        .collect::<Vec<_>>();
 
-    part_one(expenses.clone());
-    part_two(expenses);
+    part_one(&expenses);
+    part_two(&expenses);
 
     Ok(())
 }
