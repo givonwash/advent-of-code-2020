@@ -41,17 +41,19 @@ impl FromStr for Seat {
     }
 }
 
-fn part_one<I: Iterator<Item = Seat>>(seats: I) {
+fn part_one(seats: &[Seat]) {
     let answer = seats
+        .iter()
         .map(|s| s.0)
         .max()
         .expect("No Boarding Passes passed as input");
     println!("Part One: {}", answer);
 }
 
-fn part_two<I: Iterator<Item = Seat>>(seats: I) {
+fn part_two(seats: &[Seat]) {
     let (min, max, sum): (Option<u32>, Option<u32>, u32) =
         seats
+            .iter()
             .map(|s| s.0)
             .fold((None, None, 0), |(amin, amax, asum), id| {
                 let min = amin.map(|mn| mn.min(id)).or(Some(id));
@@ -60,17 +62,16 @@ fn part_two<I: Iterator<Item = Seat>>(seats: I) {
                 (min, max, sum)
             });
 
-    match (min, max, sum) {
+    let ans = match (min, max, sum) {
         (Some(min), Some(max), sum) => {
             let to_max = max * (max + 1) / 2;
             let to_min = min * (min - 1) / 2;
-            let answer = to_max - to_min - sum;
-            println!("Part Two: {}", answer);
+            Some(to_max - to_min - sum)
         }
-        _ => {
-            println!("Part Two: No Answer Found");
-        }
-    }
+        _ => None,
+    };
+
+    println!("Part Two: {:?}", ans);
 }
 
 fn main() -> io::Result<()> {
@@ -79,10 +80,11 @@ fn main() -> io::Result<()> {
 
     let seats = input
         .lines()
-        .map(|seat| seat.parse().expect("Invalid Boarding Pass given"));
+        .map(|seat| seat.parse().expect("Invalid Boarding Pass given"))
+        .collect::<Vec<_>>();
 
-    part_one(seats.clone());
-    part_two(seats);
+    part_one(&seats);
+    part_two(&seats);
 
     Ok(())
 }
