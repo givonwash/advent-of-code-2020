@@ -16,10 +16,10 @@ struct Toboggan {
     slope: Point,
 }
 
-struct TobogganRide<'a> {
-    toboggan: &'a Toboggan,
+struct TobogganRide<'r, 'h> {
+    toboggan: &'r Toboggan,
     cursor: Point,
-    hill: &'a Hill<'a>,
+    hill: &'r Hill<'h>,
 }
 
 impl AddAssign for Point {
@@ -41,9 +41,9 @@ impl From<&(usize, usize)> for Point {
     }
 }
 
-impl<'a> FromIterator<&'a str> for Hill<'a> {
-    fn from_iter<T: IntoIterator<Item = &'a str>>(iter: T) -> Self {
-        let pattern = iter.into_iter().collect::<Vec<&'a str>>();
+impl<'h> FromIterator<&'h str> for Hill<'h> {
+    fn from_iter<T: IntoIterator<Item = &'h str>>(iter: T) -> Self {
+        let pattern = iter.into_iter().collect::<Vec<_>>();
         let width = pattern[0].len();
 
         Self { pattern, width }
@@ -51,7 +51,7 @@ impl<'a> FromIterator<&'a str> for Hill<'a> {
 }
 
 impl Toboggan {
-    fn ride<'a>(&'a self, start: Point, hill: &'a Hill<'a>) -> TobogganRide<'a> {
+    fn ride<'r, 'h>(&'r self, start: Point, hill: &'r Hill<'h>) -> TobogganRide<'r, 'h> {
         TobogganRide {
             toboggan: self,
             cursor: start,
@@ -60,8 +60,8 @@ impl Toboggan {
     }
 }
 
-impl<'a> TobogganRide<'a> {
-    fn str_at_cursor(&self) -> Option<&'a str> {
+impl<'r, 'h> TobogganRide<'r, 'h> {
+    fn str_at_cursor(&self) -> Option<&'h str> {
         let cursor = self.cursor;
 
         self.hill
@@ -76,8 +76,8 @@ impl<'a> TobogganRide<'a> {
     }
 }
 
-impl<'a> Iterator for TobogganRide<'a> {
-    type Item = &'a str;
+impl<'r, 'h> Iterator for TobogganRide<'r, 'h> {
+    type Item = &'h str;
 
     fn next(&mut self) -> Option<Self::Item> {
         let str_at_cursor = self.str_at_cursor();
@@ -86,7 +86,7 @@ impl<'a> Iterator for TobogganRide<'a> {
     }
 }
 
-fn part_one<'a>(hill: &'a Hill<'a>) {
+fn part_one(hill: &Hill<'_>) {
     let toboggan = Toboggan {
         slope: Point { x: 3, y: 1 },
     };
@@ -100,7 +100,7 @@ fn part_one<'a>(hill: &'a Hill<'a>) {
     println!("Part One: {}", trees_hit);
 }
 
-fn part_two<'a>(hill: &'a Hill<'a>) {
+fn part_two(hill: &Hill<'_>) {
     let slopes = [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)];
     let origin = Point { x: 0, y: 0 };
     let tree_product: usize = slopes
