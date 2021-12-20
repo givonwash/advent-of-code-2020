@@ -1,11 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Read};
 
-fn part_one<'a, I>(groups: I)
-where
-    I: Iterator<Item = &'a str>,
-{
+fn part_one(groups: &[&str]) {
     let answer: usize = groups
+        .iter()
         .map(|group| {
             group
                 .chars()
@@ -17,11 +15,9 @@ where
     println!("Part One: {}", answer);
 }
 
-fn part_two<'a, I>(groups: I)
-where
-    I: Iterator<Item = &'a str>,
-{
+fn part_two(groups: &[&str]) {
     let answer: usize = groups
+        .iter()
         .map(|group| {
             let (people, question_frequency) = group.lines().fold(
                 (0, HashMap::new()),
@@ -51,9 +47,9 @@ fn main() -> io::Result<()> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
 
-    let groups = input.split("\n\n");
+    let groups = input.split("\n\n").collect::<Vec<_>>();
 
-    part_one(groups.clone());
-    part_two(groups);
+    part_one(&groups);
+    part_two(&groups);
     Ok(())
 }
