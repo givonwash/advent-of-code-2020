@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::{HashSet, VecDeque},
+    collections::HashSet,
     io::{self, Read},
 };
 
@@ -51,29 +51,29 @@ fn part_two(nums: &[u64]) {
         })
         .expect("No invalid numbers in input");
 
-    let mut contig = VecDeque::new();
+    let (mut start, mut end) = (0, 1);
     let mut cand = nums.iter().take(first_fail_at - 1);
 
     let ans = loop {
-        let (min, max, sum): (Option<u64>, Option<u64>, u64) =
-            contig
-                .iter()
-                .fold((None, None, 0), |(mut amin, mut amax, mut asum), n| {
-                    amin = amin.map(|mn| mn.min(*n)).or(Some(*n));
-                    amax = amax.map(|mn| mn.max(*n)).or(Some(*n));
-                    asum += *n;
-                    (amin, amax, asum)
-                });
+        let (min, max, sum) = &nums[start..end].iter().fold(
+            (None, None, 0),
+            |(mut amin, mut amax, mut asum): (Option<u64>, Option<u64>, u64), n| {
+                amin = amin.map(|mn| mn.min(*n)).or(Some(*n));
+                amax = amax.map(|mn| mn.max(*n)).or(Some(*n));
+                asum += *n;
+                (amin, amax, asum)
+            },
+        );
         match sum.cmp(first_fail) {
             Ordering::Greater => {
-                contig.pop_front();
+                start += 1;
             }
             Ordering::Equal => {
                 break Some(min.unwrap() + max.unwrap());
             }
             Ordering::Less => {
-                if let Some(num) = cand.next() {
-                    contig.push_back(*num);
+                if cand.next().is_some() {
+                    end += 1;
                 } else {
                     break None;
                 }
