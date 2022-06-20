@@ -21,14 +21,14 @@ Using the Advent-of-Code 2020 to polish up on my Rust skills
 
 From the root of this repository
 
-```shell
-cat ./day{N}/input/{input_filename}.txt | nix run .#day{N}
+```bash
+cat './day{N}/input/{input_filename}.txt' | nix run '.#day{N}'
 ```
 
 ### Using Cargo
 
 From inside the `day{N}` directory.
 
-```shell
-cat ./input/{input_filename}.txt | cargo run
+```bash
+cat './input/{input_filename}.txt' | cargo run
 ```
