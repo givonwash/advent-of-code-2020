@@ -17,6 +17,16 @@ Using the Advent-of-Code 2020 to polish up on my Rust skills
 
 ## Running the Binary
 
+### Using `nix`
+
+From the root of this repository
+
+```
+cat ./day{N}/input/{input_filename}.txt | nix run .#day{N}
+```
+
+### Using Cargo
+
 From inside the `day{N}` directory.
 
 ```shell
