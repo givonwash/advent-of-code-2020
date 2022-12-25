@@ -2,10 +2,7 @@ use std::io::{self, Read};
 use std::ops::AddAssign;
 
 #[derive(Clone, Copy)]
-struct Point {
-    x: usize,
-    y: usize,
-}
+struct Point(usize, usize);
 
 struct Hill<'a> {
     pattern: Vec<&'a str>,
@@ -24,20 +21,20 @@ struct TobogganRide<'r, 'h> {
 
 impl AddAssign for Point {
     fn add_assign(&mut self, rhs: Self) {
-        self.x = self.x + rhs.x;
-        self.y = self.y + rhs.y;
+        self.0 = self.0 + rhs.0;
+        self.1 = self.1 + rhs.1;
     }
 }
 
 impl Point {
     fn normalize_x(&mut self, divisor: usize) {
-        self.x %= divisor;
+        self.0 %= divisor;
     }
 }
 
 impl From<&(usize, usize)> for Point {
     fn from((x, y): &(usize, usize)) -> Self {
-        Self { x: *x, y: *y }
+        Self(*x, *y)
     }
 }
 
@@ -66,8 +63,8 @@ impl<'r, 'h> TobogganRide<'r, 'h> {
 
         self.hill
             .pattern
-            .get(cursor.y)?
-            .get(cursor.x..(cursor.x + 1))
+            .get(cursor.1)?
+            .get(cursor.0..(cursor.0 + 1))
     }
 
     fn advance(&mut self) {
@@ -87,22 +84,20 @@ impl<'r, 'h> Iterator for TobogganRide<'r, 'h> {
 }
 
 fn part_one(hill: &Hill<'_>) {
-    let toboggan = Toboggan {
-        slope: Point { x: 3, y: 1 },
-    };
+    let toboggan = Toboggan { slope: Point(3, 1) };
 
-    let origin = Point { x: 0, y: 0 };
+    let origin = Point(0, 0);
     let trees_hit = toboggan
         .ride(origin, hill)
         .filter(|tile| *tile == "#")
         .count();
 
-    println!("Part One: {}", trees_hit);
+    println!("Part One: {trees_hit}");
 }
 
 fn part_two(hill: &Hill<'_>) {
     let slopes = [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)];
-    let origin = Point { x: 0, y: 0 };
+    let origin = Point(0, 0);
     let tree_product: usize = slopes
         .iter()
         .map(|s| {
@@ -114,7 +109,7 @@ fn part_two(hill: &Hill<'_>) {
         })
         .product();
 
-    println!("Part Two: {}", tree_product);
+    println!("Part Two: {tree_product}");
 }
 
 fn main() -> io::Result<()> {
