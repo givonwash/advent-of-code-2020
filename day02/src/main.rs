@@ -58,7 +58,7 @@ fn part_one(records: &[PasswordRecord<'_>]) {
         .filter(|rec| rec.is_count_compliant())
         .count();
 
-    println!("Part One: {}", answer);
+    println!("Part One: {answer}");
 }
 
 fn part_two(records: &[PasswordRecord<'_>]) {
@@ -67,7 +67,7 @@ fn part_two(records: &[PasswordRecord<'_>]) {
         .filter(|rec| rec.is_position_compliant())
         .count();
 
-    println!("Part Two: {}", answer);
+    println!("Part Two: {answer}");
 }
 
 fn main() -> io::Result<()> {
