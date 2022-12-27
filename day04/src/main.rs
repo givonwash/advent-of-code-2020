@@ -208,13 +208,13 @@ fn part_one<'a>(passports: &[Result<Passport<'a>, ParsePassportError>]) {
         .filter(|p| !matches!(p, Err(ParsePassportError::MissingField(_))))
         .count();
 
-    println!("Part One: {}", answer);
+    println!("Part One: {answer}");
 }
 
 fn part_two<'a>(passports: &[Result<Passport<'a>, ParsePassportError>]) {
     let answer = passports.iter().filter(|res| res.is_ok()).count();
 
-    println!("Part Two: {}", answer);
+    println!("Part Two: {answer}");
 }
 
 fn main() -> io::Result<()> {
