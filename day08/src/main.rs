@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     io::{self, Read},
     num::ParseIntError,
     ops::{Deref, DerefMut},
@@ -22,23 +21,11 @@ enum ParseInstructionError {
 
 struct Tape(Vec<Instruction>);
 
-#[derive(Clone, Copy)]
-enum ExecutingKind {
-    Looping,
-    NonLooping,
-}
-
-#[derive(Clone, Copy)]
-enum ExecutorState {
-    Executing(ExecutingKind),
-    Halted,
-}
-
 struct Executor<'a> {
     accumulator: i32,
-    executed: HashSet<usize>,
+    /// A vector where element `i` holds an `Option` indicating whether `tape[i]` has been executed
+    executed: Vec<Option<Instruction>>,
     head: usize,
-    state: ExecutorState,
     tape: &'a Tape,
 }
 
@@ -97,126 +84,109 @@ impl FromIterator<Instruction> for Tape {
 }
 
 impl Tape {
-    fn init_exec(&self) -> Executor<'_> {
-        self.into()
+    fn evaluate(&self) -> Executor<'_> {
+        let mut executor = Executor::from(self);
+        executor.by_ref().last();
+        executor
     }
 }
 
 impl<'a> From<&'a Tape> for Executor<'a> {
     fn from(tape: &'a Tape) -> Self {
         Self {
-            tape,
             accumulator: 0,
-            executed: HashSet::new(),
             head: 0,
-            state: ExecutorState::Executing(ExecutingKind::NonLooping),
+            tape,
+            executed: tape.iter().map(|_| None).collect(),
         }
     }
 }
 
 impl<'a> Iterator for Executor<'a> {
-    type Item = (usize, i32, Option<Instruction>, ExecutorState);
+    type Item = (usize, i32);
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.state {
-            ExecutorState::Executing(ExecutingKind::NonLooping) => {
-                if let Some(instr) = self.tape.get(self.head) {
-                    let curr = (self.head, self.accumulator, Some(*instr), self.state);
-                    self.execute(*instr);
+        use Instruction::*;
 
-                    if !self.executed.insert(self.head) {
-                        self.state = ExecutorState::Executing(ExecutingKind::Looping);
-                    }
+        self.executed
+            .get_mut(self.head)
+            .zip(self.tape.get(self.head))
+            .and_then(|(executed, instruction)| match executed {
+                Some(_) => None,
+                None => {
+                    match instruction {
+                        Acc(arg) => {
+                            self.accumulator += arg;
+                            self.head += 1;
+                        }
+                        Jmp(arg) => {
+                            if arg.is_negative() {
+                                self.head -= arg.wrapping_abs() as usize;
+                            } else {
+                                self.head += *arg as usize;
+                            }
+                        }
+                        Nop(_) => {
+                            self.head += 1;
+                        }
+                    };
 
-                    Some(curr)
-                } else {
-                    self.state = ExecutorState::Halted;
-                    Some((self.head, self.accumulator, None, self.state))
+                    *executed = Some(*instruction);
+
+                    Some((self.head, self.accumulator))
                 }
-            }
-            ExecutorState::Executing(ExecutingKind::Looping) => {
-                let instr = self.tape.get(self.head).unwrap();
-                let curr = (self.head, self.accumulator, Some(*instr), self.state);
-                self.execute(*instr);
-                Some(curr)
-            }
-            ExecutorState::Halted => Some((self.head, self.accumulator, None, self.state)),
-        }
+            })
     }
 }
 
 impl<'a> Executor<'a> {
-    fn execute(&mut self, instruction: Instruction) {
-        match instruction {
-            Instruction::Acc(arg) => {
-                self.accumulator += arg;
-                self.head += 1;
-            }
-            Instruction::Jmp(arg) => {
-                if arg.is_negative() {
-                    self.head -= arg.wrapping_abs() as usize;
-                } else {
-                    self.head += arg as usize;
-                }
-            }
-            Instruction::Nop(_) => {
-                self.head += 1;
-            }
-        }
-    }
-
-    fn try_finish(&mut self) -> (usize, i32, Option<Instruction>, ExecutorState) {
-        self.by_ref()
-            .find(|(.., state)| {
-                !matches!(state, ExecutorState::Executing(ExecutingKind::NonLooping))
-            })
-            .unwrap()
+    fn is_looping(&self) -> bool {
+        matches!(self.executed.get(self.head), Some(Some(_)))
     }
 }
 
 fn part_one<I: Iterator<Item = Instruction>>(instructions: I) {
     let tape = instructions.collect::<Tape>();
-    let mut exec = tape.init_exec();
+    let executor = Executor::from(&tape);
+    let answer = executor.last().map(|(_, acc)| acc);
 
-    let (_, acc, ..) = exec.try_finish();
-
-    println!("Part One: {}", acc);
+    println!("Part One: {answer:?}");
 }
 
 fn part_two<I: Iterator<Item = Instruction>>(instructions: I) {
+    use Instruction::*;
+
     let mut tape = instructions.collect::<Tape>();
+    let answer = tape
+        .evaluate()
+        .executed
+        .into_iter()
+        .enumerate()
+        .find_map(|(ptr, instruction)| match instruction {
+            Some(Jmp(_) | Nop(_)) => {
+                tape.get_mut(ptr).unwrap().invert();
+                let executor = tape.evaluate();
 
-    let mut base_executor = tape.init_exec();
-    base_executor.try_finish();
-
-    for instr_num in base_executor.executed {
-        match tape.get_mut(instr_num).unwrap() {
-            Instruction::Acc(_) => {
-                continue;
+                if executor.is_looping() {
+                    tape.get_mut(ptr).unwrap().invert();
+                    None
+                } else {
+                    Some(executor.accumulator)
+                }
             }
-            instr => instr.invert(),
-        }
+            _ => None,
+        });
 
-        let mut modified_executor = tape.init_exec();
-        let (_, acc, _, state) = modified_executor.try_finish();
-
-        match state {
-            ExecutorState::Executing(_) => {
-                tape.get_mut(instr_num).unwrap().invert();
-            }
-            ExecutorState::Halted => {
-                println!("Part Two: {}", acc);
-                return;
-            }
-        }
-    }
+    println!("Part Two: {answer:?}");
 }
 
 fn main() -> io::Result<()> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
 
-    let instructions = input.lines().map(|instr| instr.parse().unwrap());
+    let instructions = input
+        .lines()
+        .map(|instruction| instruction.parse().unwrap());
 
     part_one(instructions.clone());
     part_two(instructions);
