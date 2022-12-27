@@ -12,7 +12,7 @@ fn part_one(groups: &[&str]) {
                 .len()
         })
         .sum();
-    println!("Part One: {}", answer);
+    println!("Part One: {answer}");
 }
 
 fn part_two(groups: &[&str]) {
@@ -40,7 +40,7 @@ fn part_two(groups: &[&str]) {
                 .count()
         })
         .sum();
-    println!("Part Two: {}", answer);
+    println!("Part Two: {answer}");
 }
 
 fn main() -> io::Result<()> {
