@@ -56,11 +56,11 @@ impl<'a> FromIterator<(&'a str, BagRule<'a>)> for Bags<'a> {
     }
 }
 
-fn part_one<'a, I>(defs: I)
+fn part_one<'a, I>(rules: I)
 where
     I: Iterator<Item = (&'a str, Pairs<'a, Rule>)>,
 {
-    let bags: Bags<'a> = defs
+    let bags: Bags<'a> = rules
         .flat_map(|(parent, children)| {
             children.filter_map(|child_pair| match child_pair.as_rule() {
                 Rule::non_empty_rule => {
@@ -109,11 +109,11 @@ where
     println!("Part One: {}", explored.len());
 }
 
-fn part_two<'a, I>(defs: I)
+fn part_two<'a, I>(rules: I)
 where
     I: Iterator<Item = (&'a str, Pairs<'a, Rule>)>,
 {
-    let bags: Bags<'a> = defs
+    let bags: Bags<'a> = rules
         .flat_map(|(parent, children)| {
             children.filter_map(move |child_pair| match child_pair.as_rule() {
                 Rule::non_empty_rule => {
@@ -153,7 +153,7 @@ where
         }
     }
 
-    println!("Part Two: {}", total);
+    println!("Part Two: {total}");
 }
 
 fn main() -> io::Result<()> {
