@@ -42,12 +42,9 @@ impl FromStr for Seat {
 }
 
 fn part_one(seats: &[Seat]) {
-    let answer = seats
-        .iter()
-        .map(|s| s.0)
-        .max()
-        .expect("No Boarding Passes passed as input");
-    println!("Part One: {}", answer);
+    let answer = seats.iter().map(|s| s.0).max();
+
+    println!("Part One: {answer:?}");
 }
 
 fn part_two(seats: &[Seat]) {
@@ -62,7 +59,7 @@ fn part_two(seats: &[Seat]) {
                 (min, max, sum)
             });
 
-    let ans = match (min, max, sum) {
+    let answer = match (min, max, sum) {
         (Some(min), Some(max), sum) => {
             let to_max = max * (max + 1) / 2;
             let to_min = min * (min - 1) / 2;
@@ -71,7 +68,7 @@ fn part_two(seats: &[Seat]) {
         _ => None,
     };
 
-    println!("Part Two: {:?}", ans);
+    println!("Part Two: {answer:?}");
 }
 
 fn main() -> io::Result<()> {
