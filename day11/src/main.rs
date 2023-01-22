@@ -16,44 +16,23 @@ struct Grid {
     width: usize,
 }
 
-enum SimulationMethod {
-    Adjacent {
-        /// how many tiles away can a tile be from another to consider them adjacent?
-        radius: usize,
-        /// the inclusive lower bound on how many occupied adjacent tiles cause an occupied seat to flip
-        occupied_threshold: usize,
-        /// the (inclusive) upper bound on how many occupied adjacent tiles cause an empty seat to flip
-        empty_threshold: usize,
-    },
-    Visible {
-        /// the inclusive lower bound on how many occupied visible tiles cause an occupied seat to flip
-        occupied_threshold: usize,
-        /// the (inclusive) upper bound on how many occupied visible tiles cause an empty seat to flip
-        empty_threshold: usize,
-    },
-}
-
-struct GridSimulator {
-    /// method to use for simulation
-    method: SimulationMethod,
-    /// has the simulation reached a steady state?
-    in_equilibrium: bool,
-    /// the current simulated grid
+struct AdjacentTileSimulator {
     grid: Grid,
+    /// the (inclusive) upper bound on how many occupied adjacent tiles cause an empty seat to flip
+    empty_threshold: usize,
+    /// the inclusive lower bound on how many occupied adjacent tiles cause an occupied seat to flip
+    occupied_threshold: usize,
+    /// how many tiles away can a tile be from another to consider them adjacent?
+    radius: usize,
 }
 
-type Transformation = fn((usize, usize)) -> Option<(usize, usize)>;
-
-const TRANSFORMATIONS: [Transformation; 8] = [
-    |(row, col)| row.checked_add(1).zip(Some(col)),
-    |(row, col)| row.checked_add(1).zip(col.checked_add(1)),
-    |(row, col)| Some(row).zip(col.checked_add(1)),
-    |(row, col)| row.checked_sub(1).zip(col.checked_add(1)),
-    |(row, col)| row.checked_sub(1).zip(Some(col)),
-    |(row, col)| row.checked_sub(1).zip(col.checked_sub(1)),
-    |(row, col)| Some(row).zip(col.checked_sub(1)),
-    |(row, col)| row.checked_add(1).zip(col.checked_sub(1)),
-];
+struct VisibleTileSimulator {
+    grid: Grid,
+    /// the inclusive lower bound on how many occupied visible tiles cause an occupied seat to flip
+    empty_threshold: usize,
+    /// the (inclusive) upper bound on how many occupied visible tiles cause an empty seat to flip
+    occupied_threshold: usize,
+}
 
 #[derive(Debug)]
 struct ParseTileError;
@@ -65,7 +44,7 @@ enum ParseGridError {
 
 impl Tile {
     fn is_seat(&self) -> bool {
-        matches!(self, Tile::Empty | Tile::Occupied)
+        matches!(self, Self::Empty | Self::Occupied)
     }
 }
 
@@ -74,9 +53,9 @@ impl TryFrom<char> for Tile {
 
     fn try_from(c: char) -> Result<Self, Self::Error> {
         match c {
-            'L' => Ok(Tile::Empty),
-            '.' => Ok(Tile::Floor),
-            '#' => Ok(Tile::Occupied),
+            'L' => Ok(Self::Empty),
+            '.' => Ok(Self::Floor),
+            '#' => Ok(Self::Occupied),
             _ => Err(ParseTileError),
         }
     }
@@ -87,8 +66,8 @@ impl Grid {
         Self { tiles, width }
     }
 
-    fn contains_index(&self, index: usize) -> bool {
-        (0..self.tiles.len()).contains(&index)
+    fn contains_index(&self, index: &usize) -> bool {
+        (0..self.tiles.len()).contains(index)
     }
 
     fn get_index(&self, location: (usize, usize)) -> Option<usize> {
@@ -131,7 +110,7 @@ impl Grid {
     }
 
     fn get_location(&self, index: usize) -> Option<(usize, usize)> {
-        if self.contains_index(index) {
+        if self.contains_index(&index) {
             Some(Self::make_location(self.width, index))
         } else {
             None
@@ -144,11 +123,29 @@ impl Grid {
         (row, col)
     }
 
-    fn simulate(self, method: SimulationMethod) -> GridSimulator {
-        GridSimulator {
-            method,
-            in_equilibrium: false,
+    fn simulate_using_adjacent_tiles(
+        self,
+        empty_threshold: usize,
+        occupied_threshold: usize,
+        radius: usize,
+    ) -> AdjacentTileSimulator {
+        AdjacentTileSimulator {
             grid: self,
+            radius,
+            empty_threshold,
+            occupied_threshold,
+        }
+    }
+
+    fn simulate_using_visible_tiles(
+        self,
+        empty_threshold: usize,
+        occupied_threshold: usize,
+    ) -> VisibleTileSimulator {
+        VisibleTileSimulator {
+            grid: self,
+            empty_threshold,
+            occupied_threshold,
         }
     }
 
@@ -156,194 +153,198 @@ impl Grid {
         self.tiles.len() / self.width
     }
 
-    fn find_neighbor<S, T>(
-        &self,
-        starting_at: (usize, usize),
-        is_neighbor: S,
-        try_again_at: T,
-    ) -> Option<(usize, Tile)>
+    fn traverse<S, T>(&self, start: (usize, usize), predicate: S, next: T) -> Option<(usize, Tile)>
     where
         S: Fn(&Tile) -> bool,
         T: Fn((usize, usize)) -> Option<(usize, usize)>,
     {
-        let mut location = starting_at;
+        self.get_index(start).and_then(|idx| {
+            let tile = self.tiles[idx];
 
-        while let Some(idx) = self.get_index(location) {
-            let tile = &self.tiles[idx];
-
-            if is_neighbor(tile) {
-                return Some((idx, *tile));
-            } else if let Some(next_location) = try_again_at(location) {
-                location = next_location;
+            if predicate(&tile) {
+                Some((idx, tile))
             } else {
-                return None;
+                next(start).and_then(|loc| self.traverse(loc, predicate, next))
             }
-        }
-
-        None
+        })
     }
 }
 
-impl Iterator for GridSimulator {
-    type Item = usize;
+impl AdjacentTileSimulator {
+    fn occupied_neighbors(&self) -> Vec<usize> {
+        use Tile::*;
+
+        let Self { grid, radius, .. } = self;
+
+        grid.tiles
+            .iter()
+            .enumerate()
+            .map(|(idx, tile)| match tile {
+                Floor => 0,
+                _ => {
+                    let (row, col) = grid.get_location(idx).unwrap();
+                    let from = (row.saturating_sub(*radius), col.saturating_sub(*radius));
+                    let to = (
+                        (row + *radius).min(grid.rows() - 1),
+                        (col + *radius).min(grid.width - 1),
+                    );
+
+                    grid.get_ranges(from, to)
+                        .unwrap()
+                        .map(|range| {
+                            if range.contains(&idx) {
+                                let normalized_idx = idx - range.start();
+                                grid.tiles[range]
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(i, t)| *i != normalized_idx && matches!(t, Occupied))
+                                    .count()
+                            } else {
+                                grid.tiles[range]
+                                    .iter()
+                                    .filter(|t| matches!(t, Occupied))
+                                    .count()
+                            }
+                        })
+                        .sum::<usize>()
+                }
+            })
+            .collect()
+    }
+}
+
+impl VisibleTileSimulator {
+    const LINE_OF_SIGHT_TRANSFORMATIONS: [fn((usize, usize)) -> Option<(usize, usize)>; 8] = [
+        |(row, col)| row.checked_add(1).zip(Some(col)),
+        |(row, col)| row.checked_add(1).zip(col.checked_add(1)),
+        |(row, col)| Some(row).zip(col.checked_add(1)),
+        |(row, col)| row.checked_sub(1).zip(col.checked_add(1)),
+        |(row, col)| row.checked_sub(1).zip(Some(col)),
+        |(row, col)| row.checked_sub(1).zip(col.checked_sub(1)),
+        |(row, col)| Some(row).zip(col.checked_sub(1)),
+        |(row, col)| row.checked_add(1).zip(col.checked_sub(1)),
+    ];
+
+    fn occupied_neighbors(&self) -> Vec<usize> {
+        use Tile::*;
+
+        let Self { grid, .. } = self;
+
+        grid.tiles
+            .iter()
+            .enumerate()
+            .map(|(idx, tile)| match tile {
+                Floor => 0,
+                _ => {
+                    let location = grid.get_location(idx).unwrap();
+                    Self::LINE_OF_SIGHT_TRANSFORMATIONS
+                        .into_iter()
+                        .filter_map(|f| {
+                            let visible_seat =
+                                f(location).and_then(|seed| grid.traverse(seed, Tile::is_seat, f));
+                            visible_seat.filter(|(_, tile)| matches!(tile, Occupied))
+                        })
+                        .count()
+                }
+            })
+            .collect()
+    }
+}
+
+impl Iterator for AdjacentTileSimulator {
+    type Item = (u32, u32);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.in_equilibrium {
-            None
-        } else {
-            let old_grid = self.grid.clone();
-            let width = self.grid.width;
-            let rows = old_grid.rows();
+        use Tile::*;
 
-            let (total_changes, total_occupied) = match self.method {
-                SimulationMethod::Adjacent {
-                    radius,
-                    occupied_threshold,
-                    empty_threshold,
-                } => self
-                    .grid
-                    .tiles
-                    .iter_mut()
-                    .enumerate()
-                    .filter_map(|(idx, tile)| match tile {
-                        Tile::Floor => None,
-                        _ => {
-                            let (row, col) = old_grid.get_location(idx).unwrap();
-                            let from = (row.saturating_sub(radius), col.saturating_sub(radius));
-                            let to = ((row + radius).min(rows - 1), (col + radius).min(width - 1));
-                            Some((idx, tile, old_grid.get_ranges(from, to).unwrap()))
-                        }
-                    })
-                    .fold(
-                        (0, 0),
-                        |(total_changes, total_occupied), (idx, tile, ranges)| {
-                            let adjacent_occupied = ranges
-                                .map(|range| {
-                                    if range.contains(&idx) {
-                                        let normalized_idx = idx - *range.start();
-                                        old_grid.tiles[range]
-                                            .iter()
-                                            .enumerate()
-                                            .filter(|(i, t)| {
-                                                *i != normalized_idx && matches!(t, Tile::Occupied)
-                                            })
-                                            .count()
-                                    } else {
-                                        old_grid.tiles[range]
-                                            .iter()
-                                            .filter(|t| matches!(t, Tile::Occupied))
-                                            .count()
-                                    }
-                                })
-                                .sum::<usize>();
+        let &mut Self {
+            empty_threshold,
+            occupied_threshold,
+            ..
+        } = self;
 
-                            match tile {
-                                Tile::Occupied => {
-                                    if adjacent_occupied >= occupied_threshold {
-                                        *tile = Tile::Empty;
-                                        (total_changes + 1, total_occupied)
-                                    } else {
-                                        (total_changes, total_occupied + 1)
-                                    }
-                                }
-                                Tile::Empty => {
-                                    if adjacent_occupied <= empty_threshold {
-                                        *tile = Tile::Occupied;
-                                        (total_changes + 1, total_occupied + 1)
-                                    } else {
-                                        (total_changes, total_occupied)
-                                    }
-                                }
-                                Tile::Floor => unreachable!(),
-                            }
-                        },
-                    ),
-                SimulationMethod::Visible {
-                    occupied_threshold,
-                    empty_threshold,
-                } => self
-                    .grid
-                    .tiles
-                    .iter_mut()
-                    .enumerate()
-                    .filter_map(|(idx, tile)| match tile {
-                        Tile::Floor => None,
-                        _ => {
-                            let location = old_grid.get_location(idx).unwrap();
+        let (changed, occupied) = self.occupied_neighbors().into_iter().enumerate().fold(
+            (0, 0),
+            |(changed, occupied), (idx, adjacent_occupied)| match &mut self.grid.tiles[idx] {
+                tile @ Occupied => {
+                    if adjacent_occupied >= occupied_threshold {
+                        *tile = Empty;
+                        (changed + 1, occupied)
+                    } else {
+                        (changed, occupied + 1)
+                    }
+                }
+                tile @ Empty => {
+                    if adjacent_occupied <= empty_threshold {
+                        *tile = Occupied;
+                        (changed + 1, occupied + 1)
+                    } else {
+                        (changed, occupied)
+                    }
+                }
+                Floor => (changed, occupied),
+            },
+        );
 
-                            let occupied = TRANSFORMATIONS
-                                .into_iter()
-                                .filter_map(|transform| {
-                                    transform(location)
-                                        .and_then(|location| {
-                                            old_grid.find_neighbor(
-                                                location,
-                                                Tile::is_seat,
-                                                transform,
-                                            )
-                                        })
-                                        .filter(|neigbor| matches!(neigbor, (_, Tile::Occupied)))
-                                })
-                                .count();
+        (changed > 0).then(|| (changed, occupied))
+    }
+}
 
-                            Some((tile, occupied))
-                        }
-                    })
-                    .fold(
-                        (0, 0),
-                        |(total_changes, total_occupied), (tile, visibly_occupied)| match tile {
-                            Tile::Occupied => {
-                                if visibly_occupied >= occupied_threshold {
-                                    *tile = Tile::Empty;
-                                    (total_changes + 1, total_occupied)
-                                } else {
-                                    (total_changes, total_occupied + 1)
-                                }
-                            }
-                            Tile::Empty => {
-                                if visibly_occupied <= empty_threshold {
-                                    *tile = Tile::Occupied;
-                                    (total_changes + 1, total_occupied + 1)
-                                } else {
-                                    (total_changes, total_occupied)
-                                }
-                            }
-                            Tile::Floor => unreachable!(),
-                        },
-                    ),
-            };
+impl Iterator for VisibleTileSimulator {
+    type Item = (u32, u32);
 
-            if total_changes == 0 {
-                self.in_equilibrium = true;
-                None
-            } else {
-                Some(total_occupied)
-            }
-        }
+    fn next(&mut self) -> Option<Self::Item> {
+        use Tile::*;
+
+        let &mut Self {
+            empty_threshold,
+            occupied_threshold,
+            ..
+        } = self;
+
+        let (changed, occupied) = self.occupied_neighbors().into_iter().enumerate().fold(
+            (0, 0),
+            |(changed, occupied), (idx, adjacent_occupied)| match &mut self.grid.tiles[idx] {
+                tile @ Occupied => {
+                    if adjacent_occupied >= occupied_threshold {
+                        *tile = Empty;
+                        (changed + 1, occupied)
+                    } else {
+                        (changed, occupied + 1)
+                    }
+                }
+                tile @ Empty => {
+                    if adjacent_occupied <= empty_threshold {
+                        *tile = Occupied;
+                        (changed + 1, occupied + 1)
+                    } else {
+                        (changed, occupied)
+                    }
+                }
+                Floor => (changed, occupied),
+            },
+        );
+
+        (changed > 0).then(|| (changed, occupied))
     }
 }
 
 fn part_one(grid: Grid) {
-    let final_occupied = grid
-        .simulate(SimulationMethod::Adjacent {
-            radius: 1,
-            occupied_threshold: 4,
-            empty_threshold: 0,
-        })
-        .last();
+    let occupied = grid
+        .simulate_using_adjacent_tiles(0, 4, 1)
+        .last()
+        .map(|(_, o)| o);
 
-    println!("Part One: {final_occupied:?}");
+    println!("Part One: {occupied:?}");
 }
 
 fn part_two(grid: Grid) {
-    let final_occupied = grid
-        .simulate(SimulationMethod::Visible {
-            occupied_threshold: 5,
-            empty_threshold: 0,
-        })
-        .last();
+    let occupied = grid
+        .simulate_using_visible_tiles(0, 5)
+        .last()
+        .map(|(_, o)| o);
 
-    println!("Part Two: {final_occupied:?}");
+    println!("Part Two: {occupied:?}");
 }
 
 fn main() -> io::Result<()> {
@@ -435,35 +436,35 @@ mod test {
     fn test_find_neighbor() {
         let grid = create_grid();
         assert_eq!(
-            grid.find_neighbor((3, 1), Tile::is_seat, |(row, col)| row
+            grid.traverse((3, 1), Tile::is_seat, |(row, col)| row
                 .checked_sub(1)
                 .zip(Some(col))),
             Some((13, Empty))
         );
         assert_eq!(
-            grid.find_neighbor(
+            grid.traverse(
                 (3, 2),
-                |tile| matches!(tile, Tile::Occupied),
+                |tile| matches!(tile, Occupied),
                 |(row, col)| row.checked_sub(1).zip(col.checked_sub(1))
             ),
             None
         );
         assert_eq!(
-            grid.find_neighbor(
+            grid.traverse(
                 (0, 0),
-                |tile| matches!(tile, Tile::Floor),
+                |tile| matches!(tile, Floor),
                 |(row, col)| Some(row).zip(col.checked_add(1))
             ),
             Some((2, Floor))
         );
         assert_eq!(
-            grid.find_neighbor((4, 4), Tile::is_seat, |(row, col)| row
+            grid.traverse((4, 4), Tile::is_seat, |(row, col)| row
                 .checked_add(1)
                 .zip(col.checked_add(1))),
             None
         );
         assert_eq!(
-            grid.find_neighbor((0, 15), Tile::is_seat, |(row, col)| Some(row)
+            grid.traverse((0, 15), Tile::is_seat, |(row, col)| Some(row)
                 .zip(col.checked_sub(1))),
             None
         );
