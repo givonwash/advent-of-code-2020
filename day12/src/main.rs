@@ -67,7 +67,7 @@ impl Point {
     fn rotate(&mut self, rotation: Rotation) {
         use Rotation::*;
 
-        let Point(x, y) = self;
+        let Self(x, y) = self;
 
         *self = match rotation {
             Right => Point(*y, x.neg()),
@@ -185,7 +185,7 @@ where
             use Direction::*;
             use Instruction::*;
 
-            let OrientedShipRide {
+            let Self {
                 orientation, ship, ..
             } = self;
 
@@ -240,7 +240,7 @@ where
             use Direction::*;
             use Instruction::*;
 
-            let WaypointShipRide { ship, waypoint, .. } = self;
+            let Self { ship, waypoint, .. } = self;
 
             match instruction {
                 Shift {
