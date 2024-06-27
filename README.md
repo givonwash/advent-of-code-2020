@@ -6,29 +6,31 @@ Using the Advent-of-Code 2020 to polish up on my Rust skills
 
 ```
 .
-├── README.md       # this document
-└── day{N}          # Rust binary for dayN where 1 <= N <= 25
-    ├── Cargo.lock
-    ├── Cargo.toml
-    ├── input       # contains the input for the day's challenge
+└── day{N}
+    ├── input
+    │   └── input.txt  # contains the input for the day's challenge
     └── src
-        └── main.rs
+        └── main.rs    # Entrypoint for day{N}'s challenge where 1 <= N <= 25
 ```
 
-## Running the Binary
+## Usage
 
-### Using `nix`
+### With [`nix`](https://nixos.org/)
 
 From the root of this repository
 
 ```bash
-cat './day{N}/input/{input_filename}.txt' | nix run '.#day{N}'
+# Replace `$NDAY` below with the day's challenge you'd like to run
+NDAY=$NDAY cat "./day${NDAY}/input/input.txt" | nix run ".#day${NDAY}"
 ```
 
-### Using Cargo
+### Without [`nix`](https://nixos.org/)
+
+> [!NOTE]
+> To run the binary corresponding to each day in this project without `nix`, you'll need to have [`cargo`](https://github.com/rust-lang/cargo) installed via your preferred package manager and available in your `$PATH`
 
 From inside the `day{N}` directory.
 
 ```bash
-cat './input/{input_filename}.txt' | cargo run
+cat './input/input.txt' | cargo run
 ```
